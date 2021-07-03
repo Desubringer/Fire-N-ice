@@ -23,8 +23,8 @@ class Player{
 		if((moveTo=='right')^this.dir){		//why not
 			this.Turn(); kbIgnore = true; return;
 		}
-		let step = moveTo == 'right'? 1 : -1; //to change column by this value, also to check the things another column ahead
-		let liesAhead = this.column + step;
+		let step = moveTo == 'right'? 1 : -1; //player.column += step, but first
+		let liesAhead = this.column + step;	//let's find out what's in front of us
 
 		if (field[this.row][liesAhead] == 'empty' || field[this.row][liesAhead] == 'fire'){	//a regular everyday step into adjacent square
 			kbIgnore = true;
@@ -35,31 +35,30 @@ class Player{
 			this.frames = 4;
 			return;
 		}
-		
-		
-		
-		if ((field[this.row][liesAhead] == 'ice' || field[this.row][liesAhead] == 'metal') &&
-			(field[this.row][liesAhead + step] == 'empty' || field[this.row][liesAhead + step] == 'fire')){
+
+
+		if ((field[this.row][liesAhead] == 'ice' || field[this.row][liesAhead] == 'metal') &&	//pushable block?
+			(field[this.row][liesAhead + step] == 'empty' || field[this.row][liesAhead + step] == 'fire')){	//with nothing solid behind?
 				
 				this.Push(step, this.row, liesAhead);  return;
 
 		}
 
-		if (field[this.row-1][this.column] == 'empty' && field[this.row-1][liesAhead] == 'empty'){ //get onto <smth> solid before you, in case it cannot be pushed
+		if (field[this.row-1][this.column] == 'empty' && field[this.row-1][liesAhead] == 'empty'){ //get onto <smth> solid before you, in case it couldn't be pushed and nothing's above
 			this.Jump(); return;
 		}
-		//console.log('no can do!');	//other than step/push/burn/jump, no movement types for Dana
+		//console.log('no can do!');	//other than step/push/burn/jump, nothing happens
 	} //Player.Move()
 	
-	Push(delta, row, column){ //gets coordinates of what's being pushed
+	Push(delta, row, column){ //gets direction and coordinates of what's being pushed
 		this.state = 'push';
 		this.frame = 0;
 		this.frames = 1;
 		kbIgnore = true;
 		let toUpdate = findIndexOf(row,column);
-		engine.squaresToAnimate.splice(toUpdate, 1); //moving things get removed from game engine's array. We'll draw them manually in slide()/gravity().
-		slideMustGoOn = {delta: delta, row: row, column: column, framesLeft:15, isMetal: field[row][column]=='metal'}; //to remind: sMGO.delta is +1 for right and -1 for left, the whole object being used by slide() routine
-
+		engine.squaresToAnimate.splice(toUpdate, 1); //moving things get removed from game engine's array right away. Rendered manually in slide()/gravity().
+		slideMustGoOn = {delta: delta, row: row, column: column, framesLeft:15, isMetal: field[row][column]=='metal'}; //once again: sMGO.delta is +1 for right and -1 for left, the whole object being used by slide() routine
+		field[row][column] = 'empty'; //pushed square turns officially empty right off the bat
 	} //Player.Push()
 	
 	Jump(){
@@ -95,9 +94,9 @@ class Player{
 		if (this.frame < this.frames || this.state == 'burn'){
 			{this.frame++;keypressed = null;}	//current animation sequence continued, input flushed (user-friendly safety measure)
 			if ((this.state != 'fall') && ((field[this.row+1][this.column] == 'empty') || (field[this.row+1][this.column] == 'fire')))
-				this.Fall();					//but even as smth is already happening, it could affect us, errr, gravitationally
+				this.Fall();					//but even as smth is already happening, it could affect us, you know, gravitationally
 		if (this.state!='run' && this.state!='fall') this.duck = (field[this.row-1][this.column] != 'empty'); //or we can crouch/stand up
-		}		
+		}
 		else{					//animation cycle over, ready for user input, but first we do outcome
 			switch (this.state){								//ANIMATIONS AFTERMATH START:
 				case 'run': 	field[this.row][this.column] = 'empty';
@@ -126,22 +125,30 @@ class Player{
 								break;
 				case 'fall': 	field[this.row][this.column] = 'empty';
 								this.row++;
-								if (field[this.row][this.column]=='fire'){
+								if (field[this.row][this.column]=='fire'
+									||field[this.row+1][this.column] == 'JAR'
+									||field[this.row+1][this.column] == '+JAR'	
+									||field[this.row+1][this.column] == '+JAR+'
+									||field[this.row+1][this.column] == 'JAR+'){
 									this.Burn();return;
 								}
 								field[this.row][this.column] = 'player';
 								if (field[this.row+1][this.column] == 'empty'||
 									field[this.row+1][this.column] == 'fire'){
 										this.frame = 0;									//fall
-										this.frames = this.frames!=5?this.frames-1:5;	//deeper (and a bit faster)
-										return;											
+										this.frames!=5?this.frames--:true;	//deeper (and a bit faster)
+										return;
 								}
 								fieldUpdate(this.row);
 								break;
 				case 'jump':	field[this.row][this.column] = 'empty';
 								this.row--; this.dir?this.column++ : this.column--;
-								if (field[this.row][this.column]=='fire'){
-									this.Burn(); return;
+								if (field[this.row][this.column]=='fire'
+									||field[this.row+1][this.column] == 'JAR'
+									||field[this.row+1][this.column] == '+JAR'	
+									||field[this.row+1][this.column] == '+JAR+'
+									||field[this.row+1][this.column] == 'JAR+'){
+									this.Burn();return;
 								}
 								field[this.row][this.column] = 'player';
 								drawSquare(this.row+1, this.column);
@@ -154,14 +161,14 @@ class Player{
 								break;
 				default: 		1;
 			} 							//ANIMATIONS AFTERMATH END
-			this.state = null;		//this is reached when 
+			this.state = null;		//this point is not always reached, look out for the returns in the switch above 
 			this.frame = 0;
 			this.frames = 8;
 			if (!fallMustGoOn && !slideMustGoOn) {kbIgnore = false;}	//regain control of PC, if legit.
 			//this.duck = field[this.row-1][this.column]!='empty';
 		}
 	} //Player.Tick()
-	Draw(){										//renders state-relevant sprites from dana.png, also refreshing squares around self coz the hat is TALL and the stick is LONG.
+	Draw(){						//renders state-relevant sprites from dana.png, also refreshing squares around self coz the hat is TALL and the stick is LONG.
 		if (!this.state){
 				drawSquare(this.row-1, this.column);
 				drawSquare(this.row, this.column);
@@ -219,7 +226,7 @@ class Player{
 										ctx.drawImage(this.image, 488, 0+this.frame%2*64, 32, 64,
 											this.column* blockSize, (this.row-0.7 + this.frame/this.frames)*blockSize, blockSize, blockSize*1.7);
 									break;
-					default: throw('Dana ain\'t well today. Must\'ve caught FIRE HAHAHAHAHA');
+					default: throw('Dana ain\'t well today. Must\'ve caught FIRE MWAHAHAHAHAHA');
 			}
 			else 			//CROUCHING SPRITES, base offset: 968
 				switch (this.state){
@@ -249,7 +256,7 @@ class Player{
 
 class Engine{
 	constructor(frames, animated){
-		this.timeStart = null,	//init time, for a UI timer
+		this.timeStart = null,	//init time, for the UI timer
 		this.timeAnim = null,	//these two are
 		this.timeNow = null,	//for animation throttling purposes
 		this.puff = null,		//for an object containing row, col and frame of the current evaporating animation
@@ -289,7 +296,7 @@ const LJ = '+JAR';
 const LJR = '+JAR+';
 const JR = 'JAR+';
 
-const P = 'pipe';		//now THESE are going to take some effort to even draw... TO REDO
+const P = 'pipe';		//now THESE are going to take some effort to even draw... TO REDO?
 const LP = '+pipe';
 const LPR = '+pipe+';
 const PR = 'pipe+';
@@ -303,22 +310,22 @@ const i = 'ice';
 const g = 'ground';
 //if (you.value != "radfem") console.log ("Couldn\'t help it. No offence. Rly."); else alert("Touche!");
 
-const field = [ 	//1-4
-	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
-	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
-	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
-	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
-	[g , g , g , e , e , e , e , e , e , e , e , e , e , g , g , g],
-	[g , g , g , e , e , e , e , e , e , e , e , e , e , g , g , g],
-	[g , g , g , e , e , e , e , e , e , e , e , e , e , g , g , g],
-	[g , g , g , iR,Li , e , e , e , e , e , e , iR,Li , g , g , g],
-	[g , g , g , f , iR,LiR,Li , e , e , iR,LiR,Li , f , g , g , g],
-	[g , g , g , g , f , e , iR,LiR,LiR,Li , e , f , g , g , g , g],
-	[g , g , g , g , g , f , i , p , e , i , f , g , g , g , g , g],
-	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
-	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
-	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
-];
+// const field = [ 	//1-4
+// 	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
+// 	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
+// 	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
+// 	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
+// 	[g , g , g , e , e , e , e , e , e , e , e , e , e , g , g , g],
+// 	[g , g , g , e , e , e , e , e , e , e , e , e , e , g , g , g],
+// 	[g , g , g , e , e , e , e , e , e , e , e , e , e , g , g , g],
+// 	[g , g , g , iR,Li , e , e , e , e , e , e , iR,Li , g , g , g],
+// 	[g , g , g , f , iR,LiR,Li , e , e , iR,LiR,Li , f , g , g , g],
+// 	[g , g , g , g , f , e , iR,LiR,LiR,Li , e , f , g , g , g , g],
+// 	[g , g , g , g , g , f , i , p , e , i , f , g , g , g , g , g],
+// 	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
+// 	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
+// 	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
+// ];
 
 // const field = [ 	//9-9
 // 	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
@@ -370,6 +377,23 @@ const field = [ 	//1-4
 // 	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
 // ];
 
+const field = [ 	//JAR TESTING
+	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
+	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
+	[g , e , e , e , g , e , e , g , g , e , e , e , e , g , g , g],
+	[e , e , e , e , e , e , e , e , e , e , e , e , e , e , g , g],
+	[g , g , e , e , e , g , e , e , e , e , g , e , e , e , g , g],
+	[g , e , e , e , e , e , f , e , e , e , e , e , e , e , g , g],
+	[g , g , e , e , e , gR,LiR,Lg , e , e , p , e , e , e , e , g],
+	[g , e , e , g , e , e , e , e , e , e , g , e , e , e , e , g],
+	[g , e , e , e , g , e , j , e , g , e , J , e , g , e , g , g],
+	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
+	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
+	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
+	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
+	[g , g , g , g , g , g , g , g , g , g , g , g , g , g , g , g],
+];
+
 const canvas = document.getElementById('game');
 canvas.width = canvas.height = window.innerHeight - window.innerHeight%field[0].length;
 canvas.style.display = "block";
@@ -389,12 +413,6 @@ let PCstartPoint = PCseek();
 const player = new Player(PCstartPoint[0], PCstartPoint[1]);
 
 
-// mapObjects.tiles.src = 'img/tilemap.png';
-// mapObjects.ice.src = 'img/ice.png';
-// mapObjects.fire.src = 'img/fire.png'
-
-
-
 let squaresToAnimate=[];
 for (let row = 0; row<field.length; row++)
 	for (let col = 0; col<field[row].length; col++)
@@ -409,10 +427,11 @@ const engine = new Engine(5, squaresToAnimate);
 let fallMustGoOn = null;						//these two are used in a lifecycle
 let slideMustGoOn = null;						//to control moving blocks while still animating the neighbourhood
 
-let lvl = 1;									//governs over 10 tile presets, and who knows, for choosing the very lvl? someday... %)
+let lvl = 9;									//governs over 10 tile presets, and who knows, for choosing the very lvl, someday? %)
 let mainIterator;
 let keypressed;
 let kbIgnore = false;
+
 function kbHandler(event){
 	keypressed = event.code;
 	if (!kbIgnore){
@@ -425,6 +444,7 @@ function kbHandler(event){
 			}
 	}
 }//kbHandler()
+
 window.addEventListener('keydown', kbHandler, true);
 const msecPerFrame = 60;
 let Initializer = function(){		
@@ -487,7 +507,7 @@ for (let row=0; row<field.length; row++){
 player.Draw();
 }	//fieldDraw()
 
-function fieldUpdate(start){				//Levitation is abomination. The hunt is on!
+function fieldUpdate(start){				//Levitation is abomination. The hunt is on! Also fires up jars when needed
 let blockStart=null,						//Checks all the squares from `start` line to the top
 blockEnd=null;								//might be redesigned to checking engine.squaresToAnimate only, once upon a time
 if (fallMustGoOn) return; //we DO NOT re-init fMGO when another fall is scheduled/happening! messes the whole thing up! to each it's turn(as per original game, btw)
@@ -496,17 +516,39 @@ while(row--){		//from the row of the last action, going upward
 	for (let column=0; column<field[row].length; column++){
 		if (!blockStart){
 			switch (field[row][column]){
-		  		case 'fire':	if (field[row+1][column]=='empty'||field[row+1][column]=='player'){
+		  		case 'fire':	let underFire = field[row+1][column];
+		  						if (underFire=='empty'||underFire=='player'){
 		  							fallMustGoOn={colStart:column, colEnd:column, row:row, frames:15};
 		  							return;
 		  						}
+		  						if (underFire=='jar'||underFire=='+jar'||
+		  							underFire=='+jar+'||underFire=='jar+')
+		  							field[row+1][column] = underFire.split('jar').join('JAR');
+		  							engine.squaresToAnimate.push([row+1,column]);
 		  						break;
-		  		case 'ground+':	do	column++;							//if ground-frozen, skip them all till the right end of the block
+		  		case 'ground+':	do	column++;							//these won't fall
 		  							while (column<field[row].length &&
 		  									field[row][column] != '+ice' &&
-		  									field[row][column]!='+metal' &&
-		  									field[row][column]!='+ground' &&
-		  									field[row][column]!='+jar');
+		  									field[row][column] != '+metal' &&
+		  									field[row][column] != '+ground' &&
+		  									field[row][column] != '+jar' &&
+		  									field[row][column] != '+JAR');
+			  					break;
+			  	case 'jar+':	do	column++;							//these neither
+		  							while (column<field[row].length &&
+		  									field[row][column] != '+ice' &&
+		  									field[row][column] != '+metal' &&
+		  									field[row][column] != '+ground' &&
+		  									field[row][column] != '+jar' &&
+		  									field[row][column] != '+JAR');
+			  					break;
+			  	case 'JAR+':	do	column++;
+		  							while (column<field[row].length &&
+		  									field[row][column] != '+ice' &&
+		  									field[row][column] != '+metal' &&
+		  									field[row][column] != '+ground' &&
+		  									field[row][column] != '+jar' &&
+		  									field[row][column] != '+JAR');
 			  					break;
 			  	case 'ice':		if (field[row+1][column]=='empty'||field[row+1][column]=='fire'){
 			  						fallMustGoOn={colStart:column, colEnd:column, row:row, frames:15};
@@ -522,19 +564,36 @@ while(row--){		//from the row of the last action, going upward
 		  							blockStart=column;
 		  							console.log('new block found at '+ row +' row, '+ column +' column');
 		  						}
-		  						else {column++; blockStart=null;} //there's at least 1 more ice frozen to it, both ain't going anywhere
+		  						else{
+		  							do column++;
+		  							while (column<field[row].length &&
+		  									field[row][column] != '+ice' &&
+		  									field[row][column] !='+metal' &&
+		  									field[row][column] !='+ground' &&
+		  									field[row][column] !='+jar' &&
+		  									field[row][column] !='+JAR');
+		  							blockStart=null;
+		  						}
 		  						break;
 		  		case 'metal+':	if (field[row+1][column]=='empty'||field[row+1][column]=='fire'){
 		  							blockStart=column;
 		  							console.log('new block found at '+ row +' row, '+ column +' column');
 		  						}
-		  						else {column++; blockStart=null;}
+		  						else{
+		  							do column++;
+		  							while (column<field[row].length &&
+		  									field[row][column] != '+ice' &&
+		  									field[row][column]!='+metal' &&
+		  									field[row][column]!='+ground' &&
+		  									field[row][column]!='+jar'&&
+		  									field[row][column]!='+JAR');
+		  							blockStart=null;
+		  						}
 		  						break;
-		  		default: ; //others we just skip, for they are but FALLESS. Or, well, bugged.
+		  		default: ; //others, we just skip, for they are but FALLESS. Or, well, bugged?.
 				}
 		}else{	//blockStart initialized, means we're searching for the right end, but first...
-			if (field[row+1][column]!='empty'&&field[row+1][column]!='fire'){	//the block might continue, but it just isn't going to fall
-				console.log(1);
+			if (field[row+1][column]!='empty'&&field[row+1][column]!='fire'){	//the ice-welded block may continue, but it just isn't going to fall
 				blockStart = null;												//move on to finding another blockStart
 			}
 			else{
@@ -546,14 +605,14 @@ while(row--){		//from the row of the last action, going upward
 				case '+JAR+': blockStart=null; break;
 				case '+metal':	fallMustGoOn={colStart:blockStart, colEnd:column, row:row, frames:15}; ;return;
 				case '+ice':	fallMustGoOn={colStart:blockStart, colEnd:column, row:row, frames:15}; ;return;
-				default: console.log('the search is now on ' + row + ' row,' + column + ' column, and goes on');
+				default: 1;//console.log('the search is now on ' + row + ' row,' + column + ' column, and goes on');
 				}
 			}
 		}
 	}
 }
-fallMustGoOn = null;	//nothing levitates, it would seem
-kbIgnore = false;
+fallMustGoOn = null;	//if we didn't hit return by now, nothing is levitating
+kbIgnore = false;		//and we regain control
 }// fieldUpdate()
 
 let below = [];	
@@ -563,12 +622,12 @@ function gravity(){
 	let colEnd = fallMustGoOn.colEnd;
 	let row = fallMustGoOn.row;
 	if (fallMustGoOn.frames == 15){ //init one-square-down cycle
-		console.log('gravity initialized!');
-		console.log('row ' + row + ' col from ' + colStart + ' to '+ colEnd);
 		below =[];
 		for (let i = colStart; i<=colEnd; i++){	
-			below.push(field[row+1][i]);		//memorize what's below and 
-			engine.squaresToAnimate.splice(findIndexOf(row, i), 1); //animation: off, we're gonna do it manually
+			below.push(field[row+1][i]);		//memorize what's below and
+			let current = findIndexOf(row, i);	//if it's animated(~wasn't sliding before falling)
+			if (current != -1)
+				engine.squaresToAnimate.splice(current, 1); //animation: off, we're gonna do it manually
 		}
 	}
 
@@ -598,8 +657,8 @@ function gravity(){
 		fallMustGoOn = null;		//let's pause gravity for a nano to see what gives
 		for (let i = colStart; i<=colEnd; i++){
 			if (below[i-colStart] == 'fire'){		//the most interesting part: if there was a fire below
-				extinguish(row+1, i);			//making funny noise is mandatory, ofc
-				switch (field[row][i]){ 		//now. we iterate through the chain left to right, so [row]'n'[col] mutating are bound to differ, watch out!
+				extinguish(row+1, i);			//making funny noises is mandatory, yes
+				switch (field[row][i]){ 		//now. we iterate through the chain left to right, so [row]'n'[col] of a mutating square are bound to differ, watch out!
 					case 'ice':		field[row+1][i] = 'empty'; break;
 					case '+ice': 	switch (field[row+1][i-1]){	//right edge melts, only previous block affected
 										case 'ice+': field[row+1][i-1] = 'ice'; break;
@@ -635,18 +694,18 @@ function gravity(){
 									}
 									field[row+1][i] = 'empty';
 									break;
-					default:		field[row+1][i] = field[row][i]; 	//goes out for every immeltable (~metal) piece
+					default:		field[row+1][i] = field[row][i]; 	//this fires for every immeltable (~metal) piece
 				}
 			}
-			else{								//when below != fire, hence empty, hence [i] block falls down gracefully.
+			else{								//when below != fire, hence empty, therefore [i] block falls down gracefully.
 				field[row+1][i] = field[row][i];
 				engine.squaresToAnimate.push([row+1,i]);
 			}
 			drawSquare(row+1, i);
 
-			field[row][i] = 'empty';				//row above turns empty, no conditions here
+			field[row][i] = 'empty';				//okay, the former square can turn empty now
 			}
-		fieldUpdate(row+1); 	//any more blocks floatin around?
+		fieldUpdate(row+1); 	//any more blocks floatin around freely?
 	}
 
 }// gravity()
@@ -667,7 +726,7 @@ function drawSquare (row, column){
 							ctx.drawImage(mapObjects, 96, (lvl-1)*16, 16, 16, column*blockSize, row*blockSize, blockSize, blockSize);
 						else{																				//to dirty tricks like this
 							ctx.drawImage(mapObjects, 16, (lvl-1)*16, 16, 16, column*blockSize, row*blockSize, blockSize, blockSize);
-							ctx.drawImage(mapObjects, 120, (lvl-1)*16, 8, 16, Math.round((column+0.5)*blockSize), row*blockSize, Math.floor(blockSize/2), blockSize); 
+							ctx.drawImage(mapObjects, 120, (lvl-1)*16, 8, 16, Math.round((column+0.5)*blockSize), row*blockSize, Math.round(blockSize/2), blockSize); 
 						}
 						break;																				//but today is not the day
 		case 'ice':		ctx.drawImage(mapObjects, 0, engine.frame%5?176:160, 16, 16, column*blockSize, row*blockSize, blockSize, blockSize); break;
@@ -682,8 +741,24 @@ function drawSquare (row, column){
 						ctx.drawImage(mapObjects, 88, engine.frame%5?176:160, 8, 16, (column+0.5)*blockSize, row*blockSize, blockSize/2, blockSize);
 						break;
 		case '+metal+':	ctx.drawImage(mapObjects, 80, engine.frame%5?176:160, 16, 16, column*blockSize, row*blockSize, blockSize, blockSize); break;
+		case 'jar':		ctx.drawImage(mapObjects, 128, 0, 16, 16, column*blockSize, row*blockSize, blockSize, blockSize); break;
+		case '+jar':	ctx.drawImage(mapObjects, 144, 0, 8, 16, column*blockSize, row*blockSize, blockSize/2, blockSize); 
+						ctx.drawImage(mapObjects, 136, 0, 8, 16, (column+0.5)*blockSize, row*blockSize, blockSize/2, blockSize);
+						break;
+		case '+jar+':	ctx.drawImage(mapObjects, 144, 0, 16, 16, column*blockSize, row*blockSize, blockSize, blockSize); break;
+		case 'jar+':	ctx.drawImage(mapObjects, 128, 0, 8, 16, column*blockSize, row*blockSize, blockSize/2, blockSize); 
+						ctx.drawImage(mapObjects, 152, 0, 8, 16, (column+0.5)*blockSize, row*blockSize, blockSize/2, blockSize);
+						break;
+		case 'JAR':		ctx.drawImage(mapObjects, 128, 16*(1+engine.frame), 16, 16, column*blockSize, row*blockSize, blockSize, blockSize); break;
+		case '+JAR':	ctx.drawImage(mapObjects, 144, 16*(1+engine.frame), 8, 16, column*blockSize, row*blockSize, blockSize/2, blockSize); 
+						ctx.drawImage(mapObjects, 136, 16*(1+engine.frame), 8, 16, (column+0.5)*blockSize, row*blockSize, blockSize/2, blockSize);
+						break;
+		case '+JAR+':	ctx.drawImage(mapObjects, 144, 16*(1+engine.frame), 16, 16, column*blockSize, row*blockSize, blockSize, blockSize); break;
+		case 'JAR+':	ctx.drawImage(mapObjects, 128, 16*(1+engine.frame), 8, 16, column*blockSize, row*blockSize, blockSize/2, blockSize); 
+						ctx.drawImage(mapObjects, 152, 16*(1+engine.frame), 8, 16, (column+0.5)*blockSize, row*blockSize, blockSize/2, blockSize);
+						break;
 		case 'fire':	ctx.drawImage(mapObjects, 160+(lvl-1)*32, 16*engine.frame, 16, 16, column*blockSize, row*blockSize, blockSize, blockSize); break;
-		default: true;
+		default: true;	//illegal objects are persecuted by irrendering
 	}
 
 }//drawSquare()
@@ -709,43 +784,51 @@ function slide(){
 	let column = slideMustGoOn.column;
 	let isMetal = slideMustGoOn.isMetal; //Metal is metal, ice is ice. The difference is crystal clear.
 	let onTheWay = field[row][column+delta];
-	console.log('pushing ' + field[row][column]);
-	field[row][column] = 'empty'; //prev square turns officially empty right off the bat
+	//console.log('pushing ' + field[row][column]);
 	if (slideMustGoOn.framesLeft){	//our little pretty slide smoothering 'while' substitute
 		ctx.drawImage(mapObjects, 0, (lvl-1)*16, 16, 16, column*blockSize, row*blockSize, blockSize, blockSize);
 		ctx.drawImage(mapObjects, (isMetal?64:0), 160, 16, 16, (column-delta*(--slideMustGoOn.framesLeft - 15)/15)*blockSize, row*blockSize, blockSize, blockSize);
-	}else{ //one square slide == done
+	}else{ //one square slide = done
 		column+=delta;	//shift attention to the destination square
 		console.log('changing field['+row+']['+column+'] to ' +(isMetal?'metal':'ice'));
 		field[row][column] = isMetal?'metal':'ice';
-		slideMustGoOn = null;	//prevent further sliding (for a while?) to see if there's a reason to
+		slideMustGoOn = null;	//prevent further sliding (for a while?)
 		let below = field[row+1][column];	//just for the case
-		switch (onTheWay){ //now let's check what we have bumped into, hence induce appropriate outcomes
-			case 'empty':	if (below == 'empty' || below == 'fire'){ //check whether this single block can(ergo must) fall now
+		switch (onTheWay){ //now let's check what we have bumped into, hence induce proper outcomes
+			case 'empty':	if (below == 'empty' || below == 'fire'){ //check whether this single block can(ergo must) fall now 
 								fallMustGoOn = {row: row, colStart: column, colEnd: column, frames: 15};
 								return;
 							}else
+								if (!isMetal)
+									if (below == 'JAR'||below == '+JAR'||below == '+JAR+'||below == 'JAR+'){
+										extinguish(row, column);
+										field[row][column] = 'empty';
+										drawSquare(row, column);
+										fieldUpdate(row);
+										return;
+									}
 								if (field[row][column+delta] == 'empty' || field[row][column+delta] == 'fire'){ //feels slidey still?
 									if (isMetal &&	below != 'ice'&&
 													below != '+ice'&&
 													below != '+ice+'&&
 													below != 'ice+'
-										) {engine.squaresToAnimate.push([row,column]); fieldUpdate(row); return;} //if metal, and no ice below us -> halt, re-animate, check gravity
+										) {engine.squaresToAnimate.push([row,column]); fieldUpdate(row); return;} //if metal, and no ice below it -> halt, re-animate, check gravity
 									slideMustGoOn = {delta: delta, row: row, column: column, framesLeft: 15, isMetal: isMetal}; //else go on sliding, parameters renewed
+									field[row][column] = 'empty';
 								} else {fieldUpdate(row); engine.squaresToAnimate.push([row,column]);}	//re-animate the block that reached the dead end
 							break;
-			case 'fire':	extinguish(row, column);
-							if (!isMetal){	//we pushed ice
+			case 'fire':	extinguish(row, column);	//first, we're, like, pshhh
+							if (!isMetal){
 								field[row][column] = 'empty';
 								drawSquare(row, column);
-								engine.squaresToAnimate.splice(findIndexOf(row,column), 1);	//fire'n'ice -> cease animating recipient square as well
+								engine.squaresToAnimate.splice(findIndexOf(row,column), 1);	//fire'n'ice annihilate -> cease animating recipient square as well
 								fieldUpdate(row);
 							}
-							else{		//we pushed metal
+							else{
 								field[row][column] = 'metal';
-								if ((below == 'ice'||below == '+ice'||below == '+ice+'||below == 'ice+')&&		//check if metal slides on
+								if ((below == 'ice'||below == '+ice'||below == '+ice+'||below == 'ice+')&&		//check if metal piece slides on
 									(field[row][column+delta] == 'empty'||field[row][column+delta] == 'fire')){
-									engine.squaresToAnimate.splice(findIndexOf(row,column), 1);		//if it does, current square is ejected from animated ones
+									engine.squaresToAnimate.splice(findIndexOf(row,column), 1);		//if it does, current square is ejected from animated ones(if it's not, "shine on you crazy metal")
 									slideMustGoOn = {delta:delta, row: row, column: column, framesLeft: 15, isMetal: isMetal}; //parameters renewed
 								}
 							}
@@ -757,7 +840,7 @@ function slide(){
 
 function extinguish(row, col){
 	destroyAnim(row, col);
-	
+	//playSFX('extinguish');
 }//destroy()
 
 function destroyAnim(row, col) {
@@ -765,10 +848,14 @@ function destroyAnim(row, col) {
 	//should go like this: pshhh!
 }//destroyAnim()
 
-function iceMagic(row, column){
-	// TODO
+function iceMagic(row, column){		//this function mostly relies on working with strings
+									//coz whenever we put/remove an ice square,
+									//it affects(and is affected by) adjacent squares in terms of managing '+'es
 	switch (field[row][column]){
-		case 'empty':	field[row][column] = 'ice';
+		case 'empty':	if (field[row+1][column]=='JAR'||field[row+1][column]=='+JAR'||
+							field[row+1][column]=='+JAR+'||field[row+1][column]=='JAR+')
+								return;
+						field[row][column] = 'ice';
 						if (field[row][column-1] != 'empty' && field[row][column-1] != 'fire'){
 							field[row][column-1] += '+';
 							field[row][column] = '+'+field[row][column];
@@ -785,7 +872,7 @@ function iceMagic(row, column){
 		case 'ice': 	engine.squaresToAnimate.splice(findIndexOf(row, column), 1);
 						field[row][column] = 'empty';
 						drawSquare(row, column);
-						fieldUpdate(row-1); 	//single block eliminated, nothing can fall but what's above
+						fieldUpdate(row-1);
 						break;
 		case '+ice': 	engine.squaresToAnimate.splice(findIndexOf(row, column), 1);
 						field[row][column] = 'empty';
@@ -810,7 +897,7 @@ function iceMagic(row, column){
 						drawSquare(row, column+1);
 						fieldUpdate(row);
 						break;
-		default: 1;	//firing a blank one, nothing created/destroyed
+		default: 1;	//playSFX('spell-failed');
 	}
 
 } //iceMagic()
